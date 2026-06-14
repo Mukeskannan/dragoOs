@@ -22,6 +22,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   final List<MessageModel> messages = [];
 
+  // ── NEW: conversation history for multi-turn context ──────────────────────
+  final List<Map<String, String>> _conversationHistory = [];
+
   Color get accentColor => isDragoMode ? Colors.redAccent : Colors.blueAccent;
 
   @override
@@ -30,7 +33,9 @@ class _ChatScreenState extends State<ChatScreen> {
     _loadMessages();
   }
 
-  // ✅ LOAD FROM SQLITE ON START
+  // =========================
+  // LOAD FROM SQLITE
+  // =========================
   Future<void> _loadMessages() async {
     final data = await ChatDB.getMessages();
 
@@ -60,10 +65,14 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  // ✅ SEND MESSAGE + SAVE TO SQLITE
+  // =========================
+  // SEND MESSAGE
+  // =========================
   Future<void> _handleSend() async {
     final userInput = _controller.text.trim();
     if (userInput.isEmpty) return;
+
+    _controller.clear();
 
     final userMsg = MessageModel(
       text: userInput,
@@ -77,11 +86,35 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     await ChatDB.insertMessage(userMsg);
-
-    _controller.clear();
     _scrollToBottom();
 
-    final reply = await ApiService.sendMessage(userInput);
+    // ── 1. Extract & save memory (parallel, non-blocking) ──────────────────
+    ApiService.extractMemory(userInput).then((extracted) async {
+      for (final entry in extracted.entries) {
+        if (entry.value.isNotEmpty) {
+          await ChatDB.saveMemory(entry.key, entry.value);
+        }
+      }
+    });
+
+    // ── 2. Load full memory context for this turn ───────────────────────────
+    final memoryContext = await ChatDB.buildMemoryContext();
+
+    // ── 3. Call AI with memory context + conversation history ───────────────
+    final reply = await ApiService.sendMessage(
+      message: userInput,
+      memoryContext: memoryContext,
+      history: List.from(_conversationHistory),
+    );
+
+    // ── 4. Update in-memory conversation history ────────────────────────────
+    _conversationHistory.add({'role': 'user', 'content': userInput});
+    _conversationHistory.add({'role': 'assistant', 'content': reply});
+
+    // Keep last 20 entries (10 turns) to avoid token bloat
+    if (_conversationHistory.length > 20) {
+      _conversationHistory.removeRange(0, _conversationHistory.length - 20);
+    }
 
     final aiMsg = MessageModel(
       text: reply,
@@ -95,7 +128,6 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     await ChatDB.insertMessage(aiMsg);
-
     _scrollToBottom();
   }
 
@@ -123,7 +155,6 @@ class _ChatScreenState extends State<ChatScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // 🔥 Background dragon (UNCHANGED UI)
             Positioned.fill(
               child: Align(
                 alignment: Alignment.center,
@@ -139,7 +170,6 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 const SizedBox(height: 10),
 
-                // 🔥 Mode toggle (UNCHANGED UI)
                 Padding(
                   padding: const EdgeInsets.only(left: 16, right: 16, top: 10),
                   child: Row(
@@ -170,7 +200,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
                 const SizedBox(height: 10),
 
-                // 🔥 Chat list (FIXED)
                 Expanded(
                   child: ListView.builder(
                     controller: _scrollController,
@@ -207,7 +236,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
 
-                // 🔥 Input (UNCHANGED UI)
                 MessageInput(
                   controller: _controller,
                   onSend: _handleSend,
