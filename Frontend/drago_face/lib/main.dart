@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'screens/chat_screen.dart';
+import '../controller/chat_controller.dart';
 
 void main() {
   runApp(const DragoAIApp());
@@ -10,20 +12,23 @@ class DragoAIApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Drago AI',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Colors.black,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
+    return ChangeNotifierProvider(
+      create: (_) => ChatController()..loadMessages(), // 👈 IMPORTANT FIX
+      child: MaterialApp(
+        title: 'Drago AI',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          useMaterial3: true,
           brightness: Brightness.dark,
+          scaffoldBackgroundColor: Colors.black,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.blue,
+            brightness: Brightness.dark,
+          ),
+          fontFamily: 'Roboto',
         ),
-        fontFamily: 'Roboto',
+        home: const ChatScreen(),
       ),
-      home: const ChatScreen(),
     );
   }
 }

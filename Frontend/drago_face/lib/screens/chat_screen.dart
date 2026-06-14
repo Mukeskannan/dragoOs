@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../models/chat_message.dart';
+import '../models/message_model.dart';
 import '../services/api_service.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/dragon_widget.dart';
 import '../widgets/message_input.dart';
+import '../db/chat_db.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -19,9 +20,27 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  final List<ChatMessage> messages = [];
+  final List<MessageModel> messages = [];
 
   Color get accentColor => isDragoMode ? Colors.redAccent : Colors.blueAccent;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMessages();
+  }
+
+  // ✅ LOAD FROM SQLITE ON START
+  Future<void> _loadMessages() async {
+    final data = await ChatDB.getMessages();
+
+    setState(() {
+      messages.clear();
+      messages.addAll(data);
+    });
+
+    _scrollToBottom();
+  }
 
   void _toggleMode() {
     setState(() {
@@ -41,23 +60,42 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  // ✅ SEND MESSAGE + SAVE TO SQLITE
   Future<void> _handleSend() async {
     final userInput = _controller.text.trim();
     if (userInput.isEmpty) return;
 
+    final userMsg = MessageModel(
+      text: userInput,
+      isUser: true,
+      time: DateTime.now(),
+    );
+
     setState(() {
-      messages.add(ChatMessage(text: userInput, isUser: true));
+      messages.add(userMsg);
       isLoading = true;
     });
+
+    await ChatDB.insertMessage(userMsg);
+
     _controller.clear();
     _scrollToBottom();
 
     final reply = await ApiService.sendMessage(userInput);
 
+    final aiMsg = MessageModel(
+      text: reply,
+      isUser: false,
+      time: DateTime.now(),
+    );
+
     setState(() {
-      messages.add(ChatMessage(text: reply, isUser: false));
+      messages.add(aiMsg);
       isLoading = false;
     });
+
+    await ChatDB.insertMessage(aiMsg);
+
     _scrollToBottom();
   }
 
@@ -85,7 +123,7 @@ class _ChatScreenState extends State<ChatScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // ---- Background dragon (always visible, watermark style) ----
+            // 🔥 Background dragon (UNCHANGED UI)
             Positioned.fill(
               child: Align(
                 alignment: Alignment.center,
@@ -97,9 +135,11 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
 
-            // ---- Foreground content ----
             Column(
               children: [
+                const SizedBox(height: 10),
+
+                // 🔥 Mode toggle (UNCHANGED UI)
                 Padding(
                   padding: const EdgeInsets.only(left: 16, right: 16, top: 10),
                   child: Row(
@@ -115,12 +155,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             shape: BoxShape.circle,
                             color: accentColor.withOpacity(0.15),
                             border: Border.all(color: accentColor, width: 1.5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: accentColor.withOpacity(0.5),
-                                blurRadius: 15,
-                              ),
-                            ],
                           ),
                           child: Icon(
                             isDragoMode
@@ -134,45 +168,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
 
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 400),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: accentColor.withOpacity(0.5)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: accentColor.withOpacity(0.2),
-                          blurRadius: 20,
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        const Text(
-                          "Drago AI",
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          isDragoMode ? "Drago Mode" : "Assistant Mode",
-                          style: TextStyle(
-                            color: accentColor,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
                 const SizedBox(height: 10),
 
+                // 🔥 Chat list (FIXED)
                 Expanded(
                   child: ListView.builder(
                     controller: _scrollController,
@@ -188,42 +186,28 @@ class _ChatScreenState extends State<ChatScreen> {
                             decoration: BoxDecoration(
                               color: accentColor.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(18),
-                              border: Border.all(
-                                color: accentColor.withOpacity(0.4),
-                              ),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: accentColor,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                const Text(
-                                  "Drago is thinking...",
-                                  style: TextStyle(color: Colors.white70),
-                                ),
-                              ],
+                            child: const Text(
+                              "Drago is thinking...",
+                              style: TextStyle(color: Colors.white70),
                             ),
                           ),
                         );
                       }
 
                       final msg = messages[index];
+
                       return ChatBubble(
                         message: msg.text,
                         isUser: msg.isUser,
                         accentColor: accentColor,
+                        time: msg.time,
                       );
                     },
                   ),
                 ),
 
+                // 🔥 Input (UNCHANGED UI)
                 MessageInput(
                   controller: _controller,
                   onSend: _handleSend,

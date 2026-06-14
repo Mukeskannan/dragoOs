@@ -1,16 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class ChatBubble extends StatelessWidget {
   final String message;
   final bool isUser;
   final Color accentColor;
+  final DateTime time; // 👈 ADD THIS
 
   const ChatBubble({
     super.key,
     required this.message,
     required this.isUser,
     required this.accentColor,
+    required this.time, // 👈 ADD THIS
   });
+
+  String formatTime(DateTime t) {
+    return DateFormat('hh:mm a').format(t);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +25,7 @@ class ChatBubble extends StatelessWidget {
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
@@ -39,13 +46,31 @@ class ChatBubble extends StatelessWidget {
             width: 1,
           ),
         ),
-        child: Text(
-          message,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 15,
-            height: 1.4,
-          ),
+        child: Column(
+          crossAxisAlignment:
+              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              message,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                height: 1.4,
+              ),
+            ),
+
+            const SizedBox(height: 4),
+
+            // 👇 TIME TEXT
+            Text(
+              formatTime(time),
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.6),
+                fontSize: 10,
+              ),
+            ),
+          ],
         ),
       ),
     );
