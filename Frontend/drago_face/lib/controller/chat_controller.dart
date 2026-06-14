@@ -1,0 +1,29 @@
+import 'package:flutter/material.dart';
+import '../models/message_model.dart';
+
+
+class ChatController extends ChangeNotifier {
+  List<MessageModel> messages = [];
+
+  void addUserMessage(String text) {
+    messages.add(
+      MessageModel(
+        text: text,
+        isUser: true,
+        time: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+  }
+
+  void addAIMessage(String text) {
+    messages.add(
+      MessageModel(
+        text: text,
+        isUser: false,
+        time: DateTime.now(),
+      ),
+    );
+    notifyListeners();
+  }
+}
