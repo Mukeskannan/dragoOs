@@ -51,8 +51,8 @@ Answer clearly and concisely. If you don't know something, say so honestly.
 
 class ChatRequest(BaseModel):
     message: str
-    memory_context: Optional[str] = None       # pre-built from Flutter
-    history: Optional[list[dict]] = None       # [{role, content}, ...]
+    memory_context: Optional[str] = None
+    history: Optional[list[dict]] = None
 
 
 class MemoryRequest(BaseModel):
@@ -62,25 +62,18 @@ class MemoryRequest(BaseModel):
 # ─── Safe JSON extractor ──────────────────────────────────────────────────────
 
 def safe_parse_memory(raw: str) -> dict:
-    """
-    Robustly extract a JSON object from LLM output.
-    Returns {} on any failure — never raises.
-    """
     if not raw or not raw.strip():
         return {}
     try:
-        # Try direct parse first
         return json.loads(raw.strip())
     except json.JSONDecodeError:
         pass
     try:
-        # Strip markdown fences: ```json ... ``` or ``` ... ```
         cleaned = re.sub(r"```(?:json)?", "", raw).replace("```", "").strip()
         return json.loads(cleaned)
     except json.JSONDecodeError:
         pass
     try:
-        # Find first {...} block in the string
         match = re.search(r"\{[^{}]*\}", raw, re.DOTALL)
         if match:
             return json.loads(match.group())
@@ -98,59 +91,47 @@ def home():
 
 @app.post("/extract-memory")
 def extract_memory(data: MemoryRequest):
-    """
-    Calls a lightweight LLM to extract structured memory from a user message.
-    Always returns a valid JSON object — never crashes.
-    """
     try:
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",   # fast + cheap for extraction
+            model="llama-3.1-8b-instant",   # fast small model
             messages=[
                 {"role": "system", "content": MEMORY_EXTRACTION_PROMPT},
                 {"role": "user",   "content": data.message},
             ],
             temperature=0,
-            max_tokens=150,
+            max_tokens=2048,
         )
         raw = response.choices[0].message.content
         return {"memory": safe_parse_memory(raw)}
 
     except Exception as e:
-        # Never let memory failure crash the app
         print(f"[extract-memory] Error: {e}")
         return {"memory": {}}
 
 
 @app.post("/chat")
 def chat(data: ChatRequest):
-    """
-    Main chat endpoint.
-    Accepts optional memory_context string and conversation history.
-    """
     try:
-        # Build system prompt — inject memory if available
         system = DRAGO_SYSTEM_PROMPT
         if data.memory_context:
             system += f"\n\nWhat you know about this user:\n{data.memory_context}"
 
-        # Build message list
         messages = [{"role": "system", "content": system}]
 
         if data.history:
-            # Include last 10 turns to avoid token bloat
-            messages.extend(data.history[-10:])
+            messages.extend(data.history[-6:])  # ← was 10, now 6 turns = less tokens
 
         messages.append({"role": "user", "content": data.message})
 
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",   # ← THE KEY FIX: was 70b, now 8b instant
             messages=messages,
             temperature=0.7,
-            max_tokens=1024,
+            max_tokens=512,                  # ← was 1024, now 512 = 2x faster
         )
 
         return {"response": response.choices[0].message.content}
 
     except Exception as e:
         print(f"[chat] Error: {e}")
-        raise HTTPException(status_code=500, detail="AI service error")
+        raise HTTPException(status_code=500, detail=str(e))
