@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'screens/chat_screen.dart';
-import '../controller/chat_controller.dart';
+import 'Assistant_Mode/screens/chat_screen.dart';
+import '../Assistant_Mode/controller/chat_controller.dart';
 
 void main() {
   runApp(const DragoAIApp());
